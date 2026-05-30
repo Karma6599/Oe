@@ -1,25 +1,28 @@
 // === ÉTAT GLOBAL ===
 let isRunning = false;
+let isTestingProxies = false;
 let checkedCount = 0;
 let availableCount = 0;
 let takenCount = 0;
 let currentMode = '4c';
 let proxies = [];
 let workingProxies = [];
-let isTestingProxies = false;
+let proxyFileContent = "";
+let abortController = null;
 
 // === ÉLÉMENTS DOM ===
 const modeCards = document.querySelectorAll('.mode-card');
 const startButton = document.getElementById('startCheck');
 const logOutput = document.getElementById('logOutput');
 const amountInput = document.getElementById('amount');
-const proxyFileInput = document.getElementById('proxyFile');
 const webhookUrlInput = document.getElementById('webhookUrl');
 const customSettings = document.getElementById('customSettings');
 const checkedCountEl = document.getElementById('checkedCount');
 const availableCountEl = document.getElementById('availableCount');
 const takenCountEl = document.getElementById('takenCount');
+const usernameSettings = document.getElementById('usernameSettings');
 const proxyCheckerSection = document.getElementById('proxyCheckerSection');
+const settingsDescription = document.getElementById('settingsDescription');
 
 // === CHARGEMENT DES PARAMÈTRES ===
 function loadSettings() {
@@ -27,7 +30,6 @@ function loadSettings() {
     if (saved) {
         const settings = JSON.parse(saved);
         amountInput.value = settings.amount || 100;
-        proxyFileInput.value = settings.proxyFile || '';
         webhookUrlInput.value = settings.webhookUrl || '';
         document.getElementById('length').value = settings.length || 4;
         document.getElementById('charPool').value = settings.charPool || 'alphanum';
@@ -38,7 +40,6 @@ function loadSettings() {
 function saveSettings() {
     const settings = {
         amount: amountInput.value,
-        proxyFile: proxyFileInput.value,
         webhookUrl: webhookUrlInput.value,
         length: document.getElementById('length').value,
         charPool: document.getElementById('charPool').value,
@@ -54,8 +55,18 @@ modeCards.forEach(card => {
         card.classList.add('selected');
         currentMode = card.dataset.mode;
 
+        // Masquer/Afficher les sections
         customSettings.style.display = (currentMode === 'custom') ? 'block' : 'none';
-        proxyCheckerSection.style.display = (currentMode === 'proxy') ? 'block' : 'none';
+
+        if (currentMode === 'proxy') {
+            usernameSettings.style.display = 'none';
+            proxyCheckerSection.style.display = 'block';
+            settingsDescription.textContent = "Teste la vie de tes proxys";
+        } else {
+            usernameSettings.style.display = 'block';
+            proxyCheckerSection.style.display = 'none';
+            settingsDescription.textContent = "Quantité · proxies · webhook";
+        }
     });
 });
 
@@ -97,17 +108,22 @@ function updateStats() {
     takenCountEl.classList.add('error');
 }
 
-// === VÉRIFICATION D'UN USERNAME (via Netlify Function) ===
-async function checkUsername(username) {
+// === VÉRIFICATION D'UN USERNAME ===
+async function checkUsername(username, proxy = null) {
     try {
+        const payload = { username };
+        if (proxy) payload.proxy = proxy;
+
         const response = await fetch('/api/checkUsername', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username })
+            body: JSON.stringify(payload),
+            signal: abortController?.signal
         });
         const data = await response.json();
         return data.status;
     } catch (error) {
+        if (error.name === 'AbortError') return 'ABORTED';
         console.error('Erreur check username:', error);
         return "ERROR";
     }
@@ -132,10 +148,23 @@ async function sendToWebhook(username, webhookUrl) {
 
 // === FONCTION PRINCIPALE DE CHECK (USERNAMES) ===
 async function runChecker() {
-    if (isRunning) return;
+    if (isRunning) {
+        // Si déjà en cours, on arrête
+        isRunning = false;
+        if (abortController) {
+            abortController.abort();
+            abortController = null;
+        }
+        startButton.textContent = '▶ Lancer le check';
+        startButton.disabled = false;
+        addLog('⏹️ Check arrêté par l\'utilisateur', 'info');
+        return;
+    }
+
     isRunning = true;
-    startButton.disabled = true;
-    startButton.textContent = '⏸️ Arrêter';
+    abortController = new AbortController();
+    startButton.textContent = '⏹️ Arrêter';
+    startButton.disabled = false;
 
     checkedCount = 0;
     availableCount = 0;
@@ -148,16 +177,30 @@ async function runChecker() {
     const webhookUrl = webhookUrlInput.value;
     addLog('🚀 Démarrage du check...', 'info');
 
+    // Utiliser les proxies sélectionnés si disponible
+    const proxiesToUse = proxyFileContent.split('\n').filter(line => line.trim() !== '');
+    let proxyIndex = 0;
+
     for (let i = 0; i < amount && isRunning; i++) {
         const username = generateUsername();
         addLog(`[✓] Check: ${username}`, 'info');
 
-        const status = await checkUsername(username);
+        // Utiliser un proxy si disponible
+        const currentProxy = proxiesToUse.length > 0 ?
+            proxiesToUse[proxyIndex % proxiesToUse.length] : null;
+        if (proxiesToUse.length > 0) {
+            proxyIndex++;
+        }
+
+        const status = await checkUsername(username, currentProxy);
         checkedCount++;
 
-        if (status === 'AVAILABLE') {
+        if (status === 'ABORTED') {
+            isRunning = false;
+            break;
+        } else if (status === 'AVAILABLE') {
             availableCount++;
-            addLog(`[+] AVAILABLE: ${username}`, 'success');
+            addLog(`[+] AVAILABLE: ${username}${currentProxy ? ` (Proxy: ${currentProxy})` : ''}`, 'success');
             if (webhookUrl) await sendToWebhook(username, webhookUrl);
         } else if (status === 'TAKEN') {
             takenCount++;
@@ -170,12 +213,33 @@ async function runChecker() {
     }
 
     isRunning = false;
-    startButton.disabled = false;
+    abortController = null;
     startButton.textContent = '▶ Lancer le check';
-    addLog('✅ Check terminé !', 'info');
+    startButton.disabled = false;
+    if (isRunning === false) {
+        addLog('✅ Check terminé !', 'info');
+    }
 }
 
 // === GESTION DU PROXY CHECKER ===
+// Sélecteur de fichier pour le mode Username
+document.getElementById('selectProxyFileBtnUsername')?.addEventListener('click', () => {
+    document.getElementById('proxyFileSelectorUsername').click();
+});
+
+document.getElementById('proxyFileSelectorUsername')?.addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        proxyFileContent = e.target.result;
+        document.getElementById('selectedProxyFileName').textContent = `Fichier sélectionné: ${file.name}`;
+    };
+    reader.readAsText(file);
+});
+
+// Sélecteur de fichier pour le Proxy Checker
 document.getElementById('selectProxyFileBtn')?.addEventListener('click', () => {
     document.getElementById('proxyFileSelector').click();
 });
@@ -195,6 +259,7 @@ document.getElementById('proxyFileSelector')?.addEventListener('change', (event)
         proxyListDiv.innerHTML = `<div class="info" style="color: var(--primary);">✅ ${proxies.length} proxies chargés. Prêt à tester !</div>`;
         document.getElementById('downloadWorkingProxiesBtn').style.display = 'none';
         document.getElementById('proxyProgress').textContent = '';
+        document.getElementById('selectedProxyFileNameProxy').textContent = `Fichier sélectionné: ${file.name}`;
     };
     reader.readAsText(file);
 });
