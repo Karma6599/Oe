@@ -52,9 +52,8 @@
 
         <section class="settings">
             <h2>⚙️ Paramètres</h2>
-            <p id="settingsDescription">Quantité · proxies · webhook</p>
+            <p id="settingsDescription">Quantité · proxies · webhook · délai</p>
             <div class="settings-form">
-                <!-- PARAMÈTRES POUR LES MODES 1/2/3 -->
                 <div id="usernameSettings">
                     <div class="input-group">
                         <label># NOMBRE À CHECKER</label>
@@ -70,6 +69,13 @@
                         <label># WEBHOOK DISCORD</label>
                         <input type="url" id="webhookUrl" placeholder="https://discord.com/api/webhooks/...">
                     </div>
+                    <div class="input-group">
+                        <label># DÉLAI ENTRE LES CHECKS (ms)</label>
+                        <input type="number" id="delay" value="1000" min="0" step="100">
+                        <span style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-top: 5px;">
+                            Plus le nombre est grand, plus c'est lent (1000 = 1 seconde)
+                        </span>
+                    </div>
                     <div class="input-group" id="customSettings" style="display: none;">
                         <label># LONGUEUR</label>
                         <input type="number" id="length" value="4" min="1">
@@ -82,7 +88,6 @@
                     </div>
                 </div>
 
-                <!-- PARAMÈTRES POUR LE MODE 4 (PROXY CHECKER) -->
                 <div id="proxyCheckerSection" style="display: none;">
                     <h3 style="color: var(--primary); margin-bottom: 10px;">🔍 Testeur de Proxies</h3>
                     <input type="file" id="proxyFileSelector" accept=".txt" style="display: none;">
@@ -127,4 +132,4 @@
 
     <script src="script.js"></script>
 </body>
-                            </html>
+                        </html>
