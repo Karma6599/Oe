@@ -1,13 +1,11 @@
 {
   "name": "discord-gen-web",
   "version": "1.0.0",
-  "description": "Discord Username Generator & Checker with Proxy Tester",
   "scripts": {
-    "build": "echo 'No build step'",
     "start": "netlify dev"
   },
   "dependencies": {
     "node-fetch": "^2.6.7",
-    "https-proxy-agent": "^5.0.1"
+    "https-proxy-agent": "^5.0.1"  // ⚠️ NOUVEAU
   }
 }
