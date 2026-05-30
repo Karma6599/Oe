@@ -127,7 +127,7 @@ async function sendToWebhook(username, webhookUrl) {
         // Payload SIMPLIFIÉ pour éviter les erreurs 400
         const payload = {
             content: `🎉 **Nouveau pseudo dispo !** : \`${username}\``,
-            username: "DiscordGen Bot"
+            username: "Karam gen"
         };
 
         const response = await fetch(webhookUrl, {
