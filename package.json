@@ -1,0 +1,11 @@
+{
+  "name": "discord-gen-web",
+  "version": "1.0.0",
+  "description": "Discord Username Generator & Checker",
+  "scripts": {
+    "start": "netlify dev"
+  },
+  "dependencies": {
+    "node-fetch": "^2.6.7"
+  }
+}
