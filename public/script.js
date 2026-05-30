@@ -33,6 +33,7 @@ function loadSettings() {
         webhookUrlInput.value = settings.webhookUrl || '';
         document.getElementById('length').value = settings.length || 4;
         document.getElementById('charPool').value = settings.charPool || 'alphanum';
+        document.getElementById('delay').value = settings.delay || 1000;
     }
 }
 
@@ -43,6 +44,7 @@ function saveSettings() {
         webhookUrl: webhookUrlInput.value,
         length: document.getElementById('length').value,
         charPool: document.getElementById('charPool').value,
+        delay: document.getElementById('delay').value,
         mode: currentMode
     };
     localStorage.setItem('discordGenSettings', JSON.stringify(settings));
@@ -55,7 +57,6 @@ modeCards.forEach(card => {
         card.classList.add('selected');
         currentMode = card.dataset.mode;
 
-        // Masquer/Afficher les sections
         customSettings.style.display = (currentMode === 'custom') ? 'block' : 'none';
 
         if (currentMode === 'proxy') {
@@ -65,7 +66,7 @@ modeCards.forEach(card => {
         } else {
             usernameSettings.style.display = 'block';
             proxyCheckerSection.style.display = 'none';
-            settingsDescription.textContent = "Quantité · proxies · webhook";
+            settingsDescription.textContent = "Quantité · proxies · webhook · délai";
         }
     });
 });
@@ -108,6 +109,44 @@ function updateStats() {
     takenCountEl.classList.add('error');
 }
 
+// === ENVOI À UN WEBHOOK (CORRIGÉ) ===
+async function sendToWebhook(username, webhookUrl) {
+    if (!webhookUrl || !username) {
+        console.error('Webhook URL ou username manquant');
+        return false;
+    }
+
+    try {
+        const payload = {
+            content: `🎉 **Nouveau pseudo dispo !** : \`${username}\``,
+            username: "DiscordGen",
+            avatar_url: "https://cdn.discordapp.com/attachments/1018481124555591720/1040131693499482172/standard.gif"
+        };
+
+        const response = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.text();
+            console.error('Erreur webhook:', errorData);
+            addLog(`[!] Erreur webhook pour ${username}: ${response.status}`, 'error');
+            return false;
+        }
+
+        addLog(`[✉️] Webhook envoyé pour: ${username}`, 'info');
+        return true;
+    } catch (e) {
+        console.error('Erreur réseau webhook:', e);
+        addLog(`[!] Échec envoi webhook pour ${username}: ${e.message}`, 'error');
+        return false;
+    }
+}
+
 // === VÉRIFICATION D'UN USERNAME ===
 async function checkUsername(username, proxy = null) {
     try {
@@ -129,27 +168,9 @@ async function checkUsername(username, proxy = null) {
     }
 }
 
-// === ENVOI À UN WEBHOOK ===
-async function sendToWebhook(username, webhookUrl) {
-    if (!webhookUrl) return;
-    try {
-        await fetch(webhookUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                content: `🎉 **Nouveau pseudo dispo !** : \`${username}\``,
-                username: "DiscordGen"
-            })
-        });
-    } catch (e) {
-        console.error('Erreur webhook:', e);
-    }
-}
-
-// === FONCTION PRINCIPALE DE CHECK (USERNAMES) ===
+// === FONCTION PRINCIPALE DE CHECK (AVEC DÉLAI CONFIGURABLE) ===
 async function runChecker() {
     if (isRunning) {
-        // Si déjà en cours, on arrête
         isRunning = false;
         if (abortController) {
             abortController.abort();
@@ -174,10 +195,11 @@ async function runChecker() {
     saveSettings();
 
     const amount = parseInt(amountInput.value);
-    const webhookUrl = webhookUrlInput.value;
-    addLog('🚀 Démarrage du check...', 'info');
+    const webhookUrl = webhookUrlInput.value.trim();
+    const delay = parseInt(document.getElementById('delay').value) || 1000;
 
-    // Utiliser les proxies sélectionnés si disponible
+    addLog(`🚀 Démarrage du check (délai: ${delay}ms entre chaque requête)...`, 'info');
+
     const proxiesToUse = proxyFileContent.split('\n').filter(line => line.trim() !== '');
     let proxyIndex = 0;
 
@@ -185,12 +207,9 @@ async function runChecker() {
         const username = generateUsername();
         addLog(`[✓] Check: ${username}`, 'info');
 
-        // Utiliser un proxy si disponible
         const currentProxy = proxiesToUse.length > 0 ?
             proxiesToUse[proxyIndex % proxiesToUse.length] : null;
-        if (proxiesToUse.length > 0) {
-            proxyIndex++;
-        }
+        if (proxiesToUse.length > 0) proxyIndex++;
 
         const status = await checkUsername(username, currentProxy);
         checkedCount++;
@@ -201,7 +220,12 @@ async function runChecker() {
         } else if (status === 'AVAILABLE') {
             availableCount++;
             addLog(`[+] AVAILABLE: ${username}${currentProxy ? ` (Proxy: ${currentProxy})` : ''}`, 'success');
-            if (webhookUrl) await sendToWebhook(username, webhookUrl);
+            if (webhookUrl) {
+                const sent = await sendToWebhook(username, webhookUrl);
+                if (!sent) {
+                    addLog(`[!] Échec envoi webhook pour ${username}`, 'error');
+                }
+            }
         } else if (status === 'TAKEN') {
             takenCount++;
             addLog(`[-] TAKEN: ${username}`, 'error');
@@ -209,20 +233,20 @@ async function runChecker() {
             addLog(`[!] ERREUR: ${username} (${status})`, 'error');
         }
         updateStats();
-        await new Promise(resolve => setTimeout(resolve, 500));
+
+        if (isRunning && delay > 0) {
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
     }
 
     isRunning = false;
     abortController = null;
     startButton.textContent = '▶ Lancer le check';
     startButton.disabled = false;
-    if (isRunning === false) {
-        addLog('✅ Check terminé !', 'info');
-    }
+    addLog('✅ Check terminé !', 'info');
 }
 
 // === GESTION DU PROXY CHECKER ===
-// Sélecteur de fichier pour le mode Username
 document.getElementById('selectProxyFileBtnUsername')?.addEventListener('click', () => {
     document.getElementById('proxyFileSelectorUsername').click();
 });
@@ -239,7 +263,6 @@ document.getElementById('proxyFileSelectorUsername')?.addEventListener('change',
     reader.readAsText(file);
 });
 
-// Sélecteur de fichier pour le Proxy Checker
 document.getElementById('selectProxyFileBtn')?.addEventListener('click', () => {
     document.getElementById('proxyFileSelector').click();
 });
@@ -255,8 +278,7 @@ document.getElementById('proxyFileSelector')?.addEventListener('change', (event)
             .filter(line => line.length > 0);
 
         workingProxies = [];
-        const proxyListDiv = document.getElementById('proxyList');
-        proxyListDiv.innerHTML = `<div class="info" style="color: var(--primary);">✅ ${proxies.length} proxies chargés. Prêt à tester !</div>`;
+        document.getElementById('proxyList').innerHTML = `<div class="info" style="color: var(--primary);">✅ ${proxies.length} proxies chargés. Prêt à tester !</div>`;
         document.getElementById('downloadWorkingProxiesBtn').style.display = 'none';
         document.getElementById('proxyProgress').textContent = '';
         document.getElementById('selectedProxyFileNameProxy').textContent = `Fichier sélectionné: ${file.name}`;
