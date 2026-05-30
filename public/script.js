@@ -109,18 +109,25 @@ function updateStats() {
     takenCountEl.classList.add('error');
 }
 
-// === ENVOI À UN WEBHOOK (CORRIGÉ) ===
+// === ENVOI À UN WEBHOOK (CORRIGÉ POUR ÉVITER L'ERREUR 400) ===
 async function sendToWebhook(username, webhookUrl) {
     if (!webhookUrl || !username) {
-        console.error('Webhook URL ou username manquant');
+        console.error('[Webhook] URL ou username manquant');
+        return false;
+    }
+
+    // Vérifie le format de l'URL Discord
+    const webhookRegex = /^https:\/\/discord\.com\/api\/webhooks\/[0-9]+\/[a-zA-Z0-9_-]+$/;
+    if (!webhookRegex.test(webhookUrl)) {
+        addLog(`[!] ❌ URL de webhook INVALIDE: "${webhookUrl}". Format attendu: https://discord.com/api/webhooks/ID/TOKEN`, 'error');
         return false;
     }
 
     try {
+        // Payload SIMPLIFIÉ pour éviter les erreurs 400
         const payload = {
             content: `🎉 **Nouveau pseudo dispo !** : \`${username}\``,
-            username: "DiscordGen",
-            avatar_url: "https://cdn.discordapp.com/attachments/1018481124555591720/1040131693499482172/standard.gif"
+            username: "DiscordGen Bot"
         };
 
         const response = await fetch(webhookUrl, {
@@ -132,17 +139,15 @@ async function sendToWebhook(username, webhookUrl) {
         });
 
         if (!response.ok) {
-            const errorData = await response.text();
-            console.error('Erreur webhook:', errorData);
-            addLog(`[!] Erreur webhook pour ${username}: ${response.status}`, 'error');
+            const errorText = await response.text();
+            addLog(`[!] ❌ Erreur webhook (${response.status}): ${errorText.substring(0, 100)}`, 'error');
             return false;
         }
 
-        addLog(`[✉️] Webhook envoyé pour: ${username}`, 'info');
+        addLog(`[✉️] Webhook envoyé avec succès: ${username}`, 'success');
         return true;
     } catch (e) {
-        console.error('Erreur réseau webhook:', e);
-        addLog(`[!] Échec envoi webhook pour ${username}: ${e.message}`, 'error');
+        addLog(`[!] ❌ Échec réseau webhook: ${e.message}`, 'error');
         return false;
     }
 }
