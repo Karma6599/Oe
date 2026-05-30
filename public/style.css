@@ -157,12 +157,17 @@ p {
     font-size: 1.1rem;
     font-weight: 700;
     cursor: pointer;
-    margin-bottom: 30px;
+    margin-bottom: 10px;
     transition: transform 0.2s;
 }
 
 .cta-button:hover {
     transform: scale(1.02);
+}
+
+.cta-button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
 }
 
 .stats {
@@ -238,4 +243,38 @@ p {
 
 .log-output .info {
     color: var(--primary);
+}
+
+/* ===== STYLES POUR LE PROXY CHECKER ===== */
+#proxyCheckerSection {
+    margin-top: 20px;
+    padding: 15px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+}
+
+#proxyList {
+    margin-top: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+    background: #000;
+    padding: 10px;
+    border-radius: 8px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.proxy-valid {
+    color: var(--success) !important;
+}
+
+.proxy-invalid {
+    color: var(--error) !important;
+}
+
+#proxyProgress {
+    margin-top: 5px;
+    font-size: 0.9rem;
 }
