@@ -18,7 +18,6 @@
         <section class="modes">
             <h2>⚡ Mode de génération</h2>
             <p>Choisis comment les usernames sont construits</p>
-
             <div class="mode-cards">
                 <div class="mode-card selected" data-mode="4c">
                     <div class="mode-header">
@@ -27,7 +26,6 @@
                     </div>
                     <p class="mode-desc">a-z : 0-9 : underscore</p>
                 </div>
-
                 <div class="mode-card" data-mode="4l">
                     <div class="mode-header">
                         <span class="mode-id">MODE 2</span>
@@ -35,7 +33,6 @@
                     </div>
                     <p class="mode-desc">lowercase a-z uniquement</p>
                 </div>
-
                 <div class="mode-card" data-mode="custom">
                     <div class="mode-header">
                         <span class="mode-id">MODE 3</span>
@@ -43,7 +40,6 @@
                     </div>
                     <p class="mode-desc">longueur & pool au choix</p>
                 </div>
-
                 <div class="mode-card" data-mode="proxy">
                     <div class="mode-header">
                         <span class="mode-id">MODE 4</span>
@@ -56,40 +52,42 @@
 
         <section class="settings">
             <h2>⚙️ Paramètres</h2>
-            <p>Quantité · proxies · webhook</p>
-
+            <p id="settingsDescription">Quantité · proxies · webhook</p>
             <div class="settings-form">
-                <div class="input-group">
-                    <label># NOMBRE À CHECKER</label>
-                    <input type="number" id="amount" value="100" min="1">
+                <!-- PARAMÈTRES POUR LES MODES 1/2/3 -->
+                <div id="usernameSettings">
+                    <div class="input-group">
+                        <label># NOMBRE À CHECKER</label>
+                        <input type="number" id="amount" value="100" min="1">
+                    </div>
+                    <div class="input-group">
+                        <label># FICHIER PROXIES (pour les checks)</label>
+                        <input type="file" id="proxyFileSelectorUsername" accept=".txt" style="display: none;">
+                        <button id="selectProxyFileBtnUsername" class="cta-button">📁 Choisir un fichier de proxies</button>
+                        <span id="selectedProxyFileName" style="display: block; margin-top: 5px; font-size: 0.8rem; color: var(--text-muted);"></span>
+                    </div>
+                    <div class="input-group">
+                        <label># WEBHOOK DISCORD</label>
+                        <input type="url" id="webhookUrl" placeholder="https://discord.com/api/webhooks/...">
+                    </div>
+                    <div class="input-group" id="customSettings" style="display: none;">
+                        <label># LONGUEUR</label>
+                        <input type="number" id="length" value="4" min="1">
+                        <label># POOL DE CARACTÈRES</label>
+                        <select id="charPool">
+                            <option value="alphanum">a-z, 0-9</option>
+                            <option value="letters">a-z seulement</option>
+                            <option value="alphanum_underscore">a-z, 0-9, _</option>
+                        </select>
+                    </div>
                 </div>
 
-                <div class="input-group">
-                    <label># FICHIER PROXIES (pour le mode Username)</label>
-                    <input type="text" id="proxyFile" placeholder="proxies.txt">
-                </div>
-
-                <div class="input-group">
-                    <label># WEBHOOK DISCORD</label>
-                    <input type="url" id="webhookUrl" placeholder="https://discord.com/api/webhooks/...">
-                </div>
-
-                <div class="input-group" id="customSettings" style="display: none;">
-                    <label># LONGUEUR</label>
-                    <input type="number" id="length" value="4" min="1">
-                    <label># POOL DE CARACTÈRES</label>
-                    <select id="charPool">
-                        <option value="alphanum">a-z, 0-9</option>
-                        <option value="letters">a-z seulement</option>
-                        <option value="alphanum_underscore">a-z, 0-9, _</option>
-                    </select>
-                </div>
-
-                <!-- SECTION PROXY CHECKER -->
-                <div class="input-group" id="proxyCheckerSection" style="display: none;">
+                <!-- PARAMÈTRES POUR LE MODE 4 (PROXY CHECKER) -->
+                <div id="proxyCheckerSection" style="display: none;">
                     <h3 style="color: var(--primary); margin-bottom: 10px;">🔍 Testeur de Proxies</h3>
                     <input type="file" id="proxyFileSelector" accept=".txt" style="display: none;">
                     <button id="selectProxyFileBtn" class="cta-button">📁 Choisir un fichier de proxies</button>
+                    <span id="selectedProxyFileNameProxy" style="display: block; margin-top: 5px; font-size: 0.8rem; color: var(--text-muted);"></span>
                     <button id="testProxiesBtn" class="cta-button" style="margin-top: 10px;">⚡ Tester les proxies</button>
                     <div id="proxyTestResults" style="margin-top: 15px;">
                         <div id="proxyList"></div>
@@ -120,7 +118,7 @@
         </div>
 
         <div class="logs">
-            <h3>📜 LOGS : discord_gen.py</h3>
+            <h3>📜 LOGS</h3>
             <div id="logOutput" class="log-output">
                 En attente de lancement...
             </div>
@@ -129,4 +127,4 @@
 
     <script src="script.js"></script>
 </body>
-</html>
+                            </html>
