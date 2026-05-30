@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DiscordGen - Username Checker</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="status">● READY</div>
+            <h1>DiscordGen</h1>
+            <p>Username availability checker · webhook notifier</p>
+        </header>
+
+        <section class="modes">
+            <h2>⚡ Mode de génération</h2>
+            <p>Choisis comment les usernames sont construits</p>
+
+            <div class="mode-cards">
+                <div class="mode-card selected" data-mode="4c">
+                    <div class="mode-header">
+                        <span class="mode-id">MODE 1</span>
+                        <h3>4 Characters</h3>
+                    </div>
+                    <p class="mode-desc">a-z : 0-9 : underscore</p>
+                </div>
+
+                <div class="mode-card" data-mode="4l">
+                    <div class="mode-header">
+                        <span class="mode-id">MODE 2</span>
+                        <h3>4 Letters</h3>
+                    </div>
+                    <p class="mode-desc">lowercase a-z uniquement</p>
+                </div>
+
+                <div class="mode-card" data-mode="custom">
+                    <div class="mode-header">
+                        <span class="mode-id">MODE 3</span>
+                        <h3>Custom</h3>
+                    </div>
+                    <p class="mode-desc">longueur & pool au choix</p>
+                </div>
+
+                <div class="mode-card" data-mode="proxy">
+                    <div class="mode-header">
+                        <span class="mode-id">MODE 4</span>
+                        <h3>Check Proxy</h3>
+                    </div>
+                    <p class="mode-desc">teste la vie de tes proxys</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="settings">
+            <h2>⚙️ Paramètres</h2>
+            <p>Quantité · proxies · webhook</p>
+
+            <div class="settings-form">
+                <div class="input-group">
+                    <label># NOMBRE À CHECKER</label>
+                    <input type="number" id="amount" value="100" min="1">
+                </div>
+
+                <div class="input-group">
+                    <label># FICHIER PROXIES</label>
+                    <input type="text" id="proxyFile" placeholder="proxies.txt">
+                </div>
+
+                <div class="input-group">
+                    <label># WEBHOOK DISCORD</label>
+                    <input type="url" id="webhookUrl" placeholder="https://discord.com/api/webhooks/...">
+                </div>
+
+                <div class="input-group" id="customSettings" style="display: none;">
+                    <label># LONGUEUR</label>
+                    <input type="number" id="length" value="4" min="1">
+                    <label># POOL DE CARACTÈRES</label>
+                    <select id="charPool">
+                        <option value="alphanum">a-z, 0-9</option>
+                        <option value="letters">a-z seulement</option>
+                        <option value="alphanum_underscore">a-z, 0-9, _</option>
+                    </select>
+                </div>
+            </div>
+        </section>
+
+        <button id="startCheck" class="cta-button">
+            ▶ Lancer le check
+        </button>
+
+        <div class="stats">
+            <div class="stat-card">
+                <span class="stat-value" id="checkedCount">0</span>
+                <span class="stat-label">CHECKÉS</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value" id="availableCount">0</span>
+                <span class="stat-label">DISPONIBLES</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value" id="takenCount">0</span>
+                <span class="stat-label">PRIS</span>
+            </div>
+        </div>
+
+        <div class="logs">
+            <h3>📜 LOGS : discord_gen.py</h3>
+            <div id="logOutput" class="log-output">
+                En attente de lancement...
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
