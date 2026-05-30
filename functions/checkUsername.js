@@ -1,14 +1,13 @@
 const fetch = require('node-fetch');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
 exports.handler = async (event, context) => {
     const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
-
-    // Vérifie si le token existe
-    if (!DISCORD_TOKEN || DISCORD_TOKEN === 'TON_TOKEN_ICI') {
+    if (!DISCORD_TOKEN) {
         return {
             statusCode: 401,
             body: JSON.stringify({
-                error: 'Token Discord manquant ou invalide. Ajoute-le dans Netlify → Environment Variables (DISCORD_TOKEN).',
+                error: 'Token Discord manquant dans Netlify (DISCORD_TOKEN)',
                 status: 'UNAUTHORIZED'
             })
         };
@@ -19,18 +18,39 @@ exports.handler = async (event, context) => {
     }
 
     try {
-        const { username } = JSON.parse(event.body);
+        const { username, proxy } = JSON.parse(event.body);
         const url = "https://discord.com/api/v9/users/@me/pomelo-attempt";
+
+        // === CONFIGURATION DES HEADERS ===
         const headers = {
             "Authorization": DISCORD_TOKEN,
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" // ⚠️ OBLIGATOIRE
         };
 
+        // === CONFIGURATION DU PROXY (ENFIN UTILISÉ !) ===
+        let agent = null;
+        if (proxy) {
+            // Si le proxy a un format IP:PORT:USER:PASS
+            if (proxy.includes(':')) {
+                const parts = proxy.split(':');
+                if (parts.length === 4) {
+                    // Format: IP:PORT:USER:PASS
+                    agent = new HttpsProxyAgent(`http://${parts[2]}:${parts[3]}@${parts[0]}:${parts[1]}`);
+                } else if (parts.length === 2) {
+                    // Format: IP:PORT
+                    agent = new HttpsProxyAgent(`http://${proxy}`);
+                }
+            }
+        }
+
+        // === REQUÊTE AVEC LE PROXY ===
         const response = await fetch(url, {
             method: 'POST',
-            headers,
+            headers: headers,
             body: JSON.stringify({ username }),
-            timeout: 5000
+            agent: agent, // ⚠️ ICI, LE PROXY EST ENFIN UTILISÉ !
+            timeout: 10000
         });
 
         const data = await response.json();
@@ -43,19 +63,25 @@ exports.handler = async (event, context) => {
                     status: data.taken ? 'TAKEN' : 'AVAILABLE'
                 })
             };
-        } else if (response.status === 401) {
+        } else if (response.status === 429) {
+            const retryAfter = response.headers.get('retry-after') || 60;
             return {
-                statusCode: 401,
+                statusCode: 429,
                 body: JSON.stringify({
                     username,
-                    status: 'UNAUTHORIZED',
-                    error: 'Token Discord invalide ou expiré. Récupère un nouveau token utilisateur.'
+                    status: 'RATELIMIT',
+                    retryAfter: parseInt(retryAfter) * 1000 // en millisecondes
                 })
             };
-        } else if (response.status === 429) {
-            return { statusCode: 429, body: JSON.stringify({ username, status: 'RATELIMIT' }) };
         } else {
-            return { statusCode: 500, body: JSON.stringify({ username, status: 'ERROR' }) };
+            return {
+                statusCode: response.status,
+                body: JSON.stringify({
+                    username,
+                    status: 'ERROR',
+                    error: `Discord API error: ${response.status}`
+                })
+            };
         }
     } catch (error) {
         return {
