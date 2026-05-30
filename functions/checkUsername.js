@@ -23,11 +23,13 @@ exports.handler = async (event, context) => {
             "Authorization": DISCORD_TOKEN,
             "Content-Type": "application/json"
         };
+        const payload = { username };
 
         const response = await fetch(url, {
             method: 'POST',
             headers,
-            body: JSON.stringify({ username })
+            body: JSON.stringify(payload),
+            timeout: 5000
         });
 
         const data = await response.json();
@@ -44,6 +46,11 @@ exports.handler = async (event, context) => {
             return {
                 statusCode: 429,
                 body: JSON.stringify({ username, status: 'RATELIMIT' })
+            };
+        } else if (response.status === 401) {
+            return {
+                statusCode: 401,
+                body: JSON.stringify({ username, status: 'UNAUTHORIZED' })
             };
         } else {
             return {
