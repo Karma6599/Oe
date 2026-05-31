@@ -8,22 +8,21 @@ exports.handler = async (event, context) => {
 
     try {
         const { username, proxy } = JSON.parse(event.body);
-        const url = `https://discord.com/api/v9/auth/register`;
+
+        // Le vrai endpoint actuel pour check la dispo d'un pseudo
+        const url = `https://discord.com/api/v9/users/@me/pomelo-attempt`;
+
+        // ⚠️ METS LE TOKEN D'UN COMPTE POUBELLE ICI
+        const DISCORD_TOKEN = "MTMzMTMzODYwNTY5OTc5MzA0Nw.GabHsJ.Iw5czBWy65Vzl6tdzQk7NYEFzCkZeEz1LCryiY";
 
         const headers = {
             "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            "Authorization": DISCORD_TOKEN, // Essentiel pour cet endpoint
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         };
 
         const payload = {
-            username: username,
-            password: "FakePass123!", // ⚠️ Mot de passe bidon (obligatoire pour l'API)
-            email: `${username}@example.com`, // ⚠️ Email bidon
-            invite: null,
-            consent: true,
-            date_of_birth: "1990-01-01",
-            gift_code_sku_id: null,
-            captcha_key: null
+            username: username
         };
 
         let agent = null;
@@ -53,36 +52,23 @@ exports.handler = async (event, context) => {
 
         const data = await response.json();
 
-        if (response.status === 400) {
-            // Discord retourne une erreur si le username est pris
-            if (data.errors && data.errors.username) {
+        // L'API pomelo-attempt renvoie un JSON avec { taken: true/false }
+        if (response.status === 200) {
+            if (data.taken === true) {
                 return {
                     statusCode: 200,
-                    body: JSON.stringify({
-                        username,
-                        status: 'TAKEN',
-                        proxy
-                    })
+                    body: JSON.stringify({ username, status: 'TAKEN', proxy })
+                };
+            } else if (data.taken === false) {
+                return {
+                    statusCode: 200,
+                    body: JSON.stringify({ username, status: 'AVAILABLE', proxy })
                 };
             }
-        } else if (response.status === 200 || response.status === 201) {
-            // Si la requête passe, le username est disponible
-            return {
-                statusCode: 200,
-                body: JSON.stringify({
-                    username,
-                    status: 'AVAILABLE',
-                    proxy
-                })
-            };
         } else if (response.status === 429) {
             return {
                 statusCode: 429,
-                body: JSON.stringify({
-                    username,
-                    status: 'RATELIMIT',
-                    proxy
-                })
+                body: JSON.stringify({ username, status: 'RATELIMIT', proxy })
             };
         } else {
             return {
@@ -91,31 +77,18 @@ exports.handler = async (event, context) => {
                     username,
                     status: 'ERROR',
                     proxy,
-                    error: data.message || 'Erreur inconnue'
+                    error: data.message || 'Erreur API'
                 })
             };
         }
     } catch (error) {
-        if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
-            return {
-                statusCode: 500,
-                body: JSON.stringify({
-                    username: 'inconnu',
-                    status: 'PROXY_ERROR',
-                    proxy: error.proxy,
-                    error: error.message
-                })
-            };
-        } else {
-            return {
-                statusCode: 500,
-                body: JSON.stringify({
-                    username: 'inconnu',
-                    status: 'ERROR',
-                    proxy: error.proxy,
-                    error: error.message
-                })
-            };
-        }
+        return {
+            statusCode: 500,
+            body: JSON.stringify({
+                username: 'inconnu',
+                status: 'PROXY_ERROR',
+                error: error.message
+            })
+        };
     }
 };
