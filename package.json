@@ -1,5 +1,5 @@
 {
-  "name": "discord-gen-web",
+  "name": "discord-username-checker",
   "version": "1.0.0",
   "scripts": {
     "start": "netlify dev"
