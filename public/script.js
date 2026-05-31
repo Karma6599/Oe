@@ -16,6 +16,12 @@ const logOutput = document.getElementById('logOutput');
 const amountInput = document.getElementById('amount');
 const webhookUrlInput = document.getElementById('webhookUrl');
 const customSettings = document.getElementById('customSettings');
+const checkedCountEl = document.getElementById('checkedCount');
+const availableCountEl = document.getElementById('availableCount');
+const takenCountEl = document.getElementById('takenCount');
+const usernameSettings = document.getElementById('usernameSettings');
+const proxyCheckerSection = document.getElementById('proxyCheckerSection');
+const settingsDescription = document.getElementById('settingsDescription');
 
 // === CHARGEMENT DES PARAMÈTRES ===
 function loadSettings() {
@@ -50,6 +56,15 @@ modeCards.forEach(card => {
         card.classList.add('selected');
         currentMode = card.dataset.mode;
         customSettings.style.display = (currentMode === 'custom') ? 'block' : 'none';
+        if (currentMode === 'proxy') {
+            usernameSettings.style.display = 'none';
+            proxyCheckerSection.style.display = 'block';
+            settingsDescription.textContent = "Teste la vie de tes proxys";
+        } else {
+            usernameSettings.style.display = 'block';
+            proxyCheckerSection.style.display = 'none';
+            settingsDescription.textContent = "Quantité · proxies · webhook · délai";
+        }
     });
 });
 
@@ -77,9 +92,9 @@ function addLog(message, type = 'info') {
 
 // === MISE À JOUR DES STATS ===
 function updateStats() {
-    document.getElementById('checkedCount').textContent = checkedCount;
-    document.getElementById('availableCount').textContent = availableCount;
-    document.getElementById('takenCount').textContent = takenCount;
+    checkedCountEl.textContent = checkedCount;
+    availableCountEl.textContent = availableCount;
+    takenCountEl.textContent = takenCount;
 }
 
 // === ENVOI À UN WEBHOOK ===
@@ -89,7 +104,10 @@ async function sendToWebhook(username, webhookUrl) {
         await fetch(webhookUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content: `🎉 **Nouveau pseudo dispo !** : \`${username}\``, username: "Kxrma Bot" })
+            body: JSON.stringify({
+                content: `🎉 **Nouveau pseudo dispo !** : \`${username}\``,
+                username: "Kxrma Bot"
+            })
         });
         addLog(`[✉️] Webhook envoyé: ${username}`, 'info');
         return true;
@@ -143,7 +161,7 @@ async function runChecker() {
     const webhookUrl = webhookUrlInput.value.trim();
     const delay = parseInt(document.getElementById('delay').value) || 5000;
 
-    addLog(`🚀 Démarrage du check (délai: ${delay}ms)...`, 'info');
+    addLog(`🚀 Démarrage du check (méthode HEAD, délai: ${delay}ms)...`, 'info');
 
     workingProxies = proxyFileContent.split('\n').filter(line => line.trim() !== '');
     currentProxyIndex = 0;
@@ -172,6 +190,12 @@ async function runChecker() {
             } else if (status === 'TAKEN') {
                 takenCount++;
                 addLog(`[-] TAKEN: ${username}${currentProxy ? ` (Proxy: ${currentProxy})` : ''}`, 'error');
+            } else if (status === 'RATELIMIT') {
+                addLog(`[!] RATELIMIT: ${username}${currentProxy ? ` (Proxy: ${currentProxy})` : ''} - Attente...`, 'error');
+                // ⚠️ Attendre le temps indiqué par Discord
+                const retryAfter = 5000; // Par défaut 5s
+                await new Promise(resolve => setTimeout(resolve, retryAfter));
+                continue;
             } else if (status === 'PROXY_ERROR' || status === 'ECONNREFUSED' || status === 'ETIMEDOUT' || status === 'ERROR') {
                 if (currentProxy && workingProxies.includes(currentProxy)) {
                     const index = workingProxies.indexOf(currentProxy);
