@@ -1,14 +1,13 @@
 // === ÉTAT GLOBAL ===
 let isRunning = false;
-let isTestingProxies = false;
 let checkedCount = 0;
 let availableCount = 0;
 let takenCount = 0;
 let currentMode = '4c';
-let proxies = [];
-let workingProxies = [];
 let proxyFileContent = "";
 let abortController = null;
+let workingProxies = [];
+let currentProxyIndex = 0;
 
 // === ÉLÉMENTS DOM ===
 const modeCards = document.querySelectorAll('.mode-card');
@@ -56,9 +55,7 @@ modeCards.forEach(card => {
         modeCards.forEach(c => c.classList.remove('selected'));
         card.classList.add('selected');
         currentMode = card.dataset.mode;
-
         customSettings.style.display = (currentMode === 'custom') ? 'block' : 'none';
-
         if (currentMode === 'proxy') {
             usernameSettings.style.display = 'none';
             proxyCheckerSection.style.display = 'block';
@@ -76,17 +73,11 @@ function generateUsername() {
     const length = currentMode === 'custom' ? parseInt(document.getElementById('length').value) : 4;
     const charPool = document.getElementById('charPool').value;
     let chars = '';
-    if (charPool === 'letters') {
-        chars = 'abcdefghijklmnopqrstuvwxyz';
-    } else if (charPool === 'alphanum') {
-        chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    } else if (charPool === 'alphanum_underscore') {
-        chars = 'abcdefghijklmnopqrstuvwxyz0123456789_';
-    }
+    if (charPool === 'letters') chars = 'abcdefghijklmnopqrstuvwxyz';
+    else if (charPool === 'alphanum') chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    else if (charPool === 'alphanum_underscore') chars = 'abcdefghijklmnopqrstuvwxyz0123456789_';
     let result = '';
-    for (let i = 0; i < length; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
+    for (let i = 0; i < length; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
     return result;
 }
 
@@ -104,60 +95,27 @@ function updateStats() {
     checkedCountEl.textContent = checkedCount;
     availableCountEl.textContent = availableCount;
     takenCountEl.textContent = takenCount;
-    checkedCountEl.classList.add('info');
-    availableCountEl.classList.add('success');
-    takenCountEl.classList.add('error');
 }
 
-// === ENVOI À UN WEBHOOK (CORRIGÉ POUR ÉVITER L'ERREUR 400) ===
+// === ENVOI À UN WEBHOOK ===
 async function sendToWebhook(username, webhookUrl) {
-    if (!webhookUrl || !username) {
-        console.error('[Webhook] URL ou username manquant');
-        return false;
-    }
-
-    // Vérifie le format de l'URL Discord
-    const webhookRegex = /^https:\/\/discord\.com\/api\/webhooks\/[0-9]+\/[a-zA-Z0-9_-]+$/;
-    if (!webhookRegex.test(webhookUrl)) {
-        addLog(`[!] ❌ URL de webhook INVALIDE: "${webhookUrl}". Format attendu: https://discord.com/api/webhooks/ID/TOKEN`, 'error');
-        return false;
-    }
-
+    if (!webhookUrl || !username) return false;
     try {
-        // Payload SIMPLIFIÉ pour éviter les erreurs 400
-        const payload = {
-            content: `🎉 **Nouveau pseudo dispo !** : \`${username}\``,
-            username: "Karam gen"
-        };
-
         const response = await fetch(webhookUrl, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payload)
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: `🎉 **Nouveau pseudo dispo !** : \`${username}\``, username: "Kxrma Bot" })
         });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            addLog(`[!] ❌ Erreur webhook (${response.status}): ${errorText.substring(0, 100)}`, 'error');
-            return false;
-        }
-
-        addLog(`[✉️] Webhook envoyé avec succès: ${username}`, 'success');
+        if (!response.ok) return false;
+        addLog(`[✉️] Webhook envoyé: ${username}`, 'info');
         return true;
-    } catch (e) {
-        addLog(`[!] ❌ Échec réseau webhook: ${e.message}`, 'error');
-        return false;
-    }
+    } catch (e) { return false; }
 }
 
 // === VÉRIFICATION D'UN USERNAME ===
 async function checkUsername(username, proxy = null) {
     try {
-        const payload = { username };
-        if (proxy) payload.proxy = proxy;
-
+        const payload = { username, proxy };
         const response = await fetch('/api/checkUsername', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -168,12 +126,11 @@ async function checkUsername(username, proxy = null) {
         return data.status;
     } catch (error) {
         if (error.name === 'AbortError') return 'ABORTED';
-        console.error('Erreur check username:', error);
         return "ERROR";
     }
 }
 
-// === FONCTION PRINCIPALE DE CHECK (AVEC DÉLAI CONFIGURABLE) ===
+// === FONCTION PRINCIPALE DE CHECK (AVEC GESTION DES PROXIES DÉFECTUEUX) ===
 async function runChecker() {
     if (isRunning) {
         isRunning = false;
@@ -203,41 +160,59 @@ async function runChecker() {
     const webhookUrl = webhookUrlInput.value.trim();
     const delay = parseInt(document.getElementById('delay').value) || 1000;
 
-    addLog(`🚀 Démarrage du check (délai: ${delay}ms entre chaque requête)...`, 'info');
+    addLog(`🚀 Démarrage du check (délai: ${delay}ms)...`, 'info');
 
-    const proxiesToUse = proxyFileContent.split('\n').filter(line => line.trim() !== '');
-    let proxyIndex = 0;
+    workingProxies = proxyFileContent.split('\n').filter(line => line.trim() !== '');
+    currentProxyIndex = 0;
 
     for (let i = 0; i < amount && isRunning; i++) {
         const username = generateUsername();
         addLog(`[✓] Check: ${username}`, 'info');
 
-        const currentProxy = proxiesToUse.length > 0 ?
-            proxiesToUse[proxyIndex % proxiesToUse.length] : null;
-        if (proxiesToUse.length > 0) proxyIndex++;
-
-        const status = await checkUsername(username, currentProxy);
-        checkedCount++;
-
-        if (status === 'ABORTED') {
-    isRunning = false;
-    break;
-} else if (status === 'AVAILABLE') {
-    availableCount++;
-    addLog(`[+] AVAILABLE: ${username}${currentProxy ? ` (Proxy: ${currentProxy})` : ''}`, 'success');
-    if (webhookUrl) await sendToWebhook(username, webhookUrl);
-} else if (status === 'TAKEN') {
-    takenCount++;
-    addLog(`[-] TAKEN: ${username}${currentProxy ? ` (Proxy: ${currentProxy})` : ''}`, 'error'); // ⚠️ PROXY AFFICHÉ
-} else if (status === 'RATELIMIT') {
-    addLog(`[!] RATELIMIT: ${username}${currentProxy ? ` (Proxy: ${currentProxy})` : ''}`, 'error'); // ⚠️ PROXY AFFICHÉ
-} else {
-    addLog(`[!] ERREUR: ${username}${currentProxy ? ` (Proxy: ${currentProxy})` : ''} (${status})`, 'error'); // ⚠️ PROXY AFFICHÉ
+        let currentProxy = null;
+        if (workingProxies.length > 0) {
+            currentProxy = workingProxies[currentProxyIndex % workingProxies.length];
+            currentProxyIndex++;
         }
-        updateStats();
 
-        if (isRunning && delay > 0) {
-            await new Promise(resolve => setTimeout(resolve, delay));
+        try {
+            const status = await checkUsername(username, currentProxy);
+            checkedCount++;
+
+            if (status === 'ABORTED') {
+                isRunning = false;
+                break;
+            } else if (status === 'AVAILABLE') {
+                availableCount++;
+                addLog(`[+] AVAILABLE: ${username}${currentProxy ? ` (Proxy: ${currentProxy})` : ''}`, 'success');
+                if (webhookUrl) await sendToWebhook(username, webhookUrl);
+            } else if (status === 'TAKEN') {
+                takenCount++;
+                addLog(`[-] TAKEN: ${username}${currentProxy ? ` (Proxy: ${currentProxy})` : ''}`, 'error');
+            } else if (status === 'PROXY_ERROR' || status === 'ECONNREFUSED' || status === 'ETIMEDOUT' || status === 'ERROR') {
+                if (currentProxy && workingProxies.includes(currentProxy)) {
+                    const index = workingProxies.indexOf(currentProxy);
+                    workingProxies.splice(index, 1);
+                    addLog(`[!] Proxy défectueux: ${currentProxy} → Retiré !`, 'error');
+                    currentProxyIndex--;
+                }
+                continue;
+            } else {
+                addLog(`[!] ERREUR: ${username}${currentProxy ? ` (Proxy: ${currentProxy})` : ''} (${status})`, 'error');
+            }
+            updateStats();
+
+            if (isRunning && delay > 0) {
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        } catch (error) {
+            if (currentProxy && workingProxies.includes(currentProxy)) {
+                const index = workingProxies.indexOf(currentProxy);
+                workingProxies.splice(index, 1);
+                addLog(`[!] Proxy défectueux (erreur réseau): ${currentProxy} → Retiré !`, 'error');
+                currentProxyIndex--;
+            }
+            continue;
         }
     }
 
@@ -248,7 +223,7 @@ async function runChecker() {
     addLog('✅ Check terminé !', 'info');
 }
 
-// === GESTION DU PROXY CHECKER ===
+// === GESTION DES PROXIES ===
 document.getElementById('selectProxyFileBtnUsername')?.addEventListener('click', () => {
     document.getElementById('proxyFileSelectorUsername').click();
 });
@@ -256,7 +231,6 @@ document.getElementById('selectProxyFileBtnUsername')?.addEventListener('click',
 document.getElementById('proxyFileSelectorUsername')?.addEventListener('change', (event) => {
     const file = event.target.files[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (e) => {
         proxyFileContent = e.target.result;
@@ -265,105 +239,7 @@ document.getElementById('proxyFileSelectorUsername')?.addEventListener('change',
     reader.readAsText(file);
 });
 
-document.getElementById('selectProxyFileBtn')?.addEventListener('click', () => {
-    document.getElementById('proxyFileSelector').click();
-});
-
-document.getElementById('proxyFileSelector')?.addEventListener('change', (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        proxies = e.target.result.split('\n')
-            .map(line => line.trim())
-            .filter(line => line.length > 0);
-
-        workingProxies = [];
-        document.getElementById('proxyList').innerHTML = `<div class="info" style="color: var(--primary);">✅ ${proxies.length} proxies chargés. Prêt à tester !</div>`;
-        document.getElementById('downloadWorkingProxiesBtn').style.display = 'none';
-        document.getElementById('proxyProgress').textContent = '';
-        document.getElementById('selectedProxyFileNameProxy').textContent = `Fichier sélectionné: ${file.name}`;
-    };
-    reader.readAsText(file);
-});
-
-async function testProxy(proxy) {
-    try {
-        const response = await fetch('/api/checkProxy', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ proxy })
-        });
-        const data = await response.json();
-        return data.working;
-    } catch (error) {
-        console.error('Erreur test proxy:', error);
-        return false;
-    }
-}
-
-async function testAllProxies() {
-    if (isTestingProxies || proxies.length === 0) return;
-    isTestingProxies = true;
-
-    workingProxies = [];
-    const proxyListDiv = document.getElementById('proxyList');
-    proxyListDiv.innerHTML = '';
-    const progressDiv = document.getElementById('proxyProgress');
-    progressDiv.textContent = `Test en cours... (0/${proxies.length})`;
-
-    document.getElementById('testProxiesBtn').disabled = true;
-
-    for (let i = 0; i < proxies.length; i++) {
-        const proxy = proxies[i];
-        const isWorking = await testProxy(proxy);
-
-        if (isWorking) {
-            workingProxies.push(proxy);
-            proxyListDiv.innerHTML += `<div class="proxy-valid">✅ ${proxy} - VALIDE</div>`;
-        } else {
-            proxyListDiv.innerHTML += `<div class="proxy-invalid">❌ ${proxy} - INVALIDE</div>`;
-        }
-
-        progressDiv.textContent = `Test en cours... (${i+1}/${proxies.length})`;
-        await new Promise(resolve => setTimeout(resolve, 200));
-    }
-
-    progressDiv.textContent = `✅ Test terminé ! ${workingProxies.length}/${proxies.length} proxies valides.`;
-    document.getElementById('testProxiesBtn').disabled = false;
-    isTestingProxies = false;
-
-    if (workingProxies.length > 0) {
-        document.getElementById('downloadWorkingProxiesBtn').style.display = 'block';
-    }
-}
-
-function downloadFile(content, filename) {
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-}
-
-// === ÉCOUTEURS D'ÉVÉNEMENTS ===
-startButton.addEventListener('click', runChecker);
-document.getElementById('testProxiesBtn')?.addEventListener('click', testAllProxies);
-document.getElementById('downloadWorkingProxiesBtn')?.addEventListener('click', () => {
-    if (workingProxies.length === 0) {
-        addLog('❌ Aucun proxy valide à télécharger !', 'error');
-        return;
-    }
-    const content = workingProxies.join('\n');
-    downloadFile(content, 'proxies_valides.txt');
-    addLog(`✅ Téléchargement de ${workingProxies.length} proxies valides !`, 'success');
-});
-
 // === INITIALISATION ===
 loadSettings();
 updateStats();
+startButton.addEventListener('click', runChecker);
