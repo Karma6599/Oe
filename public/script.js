@@ -220,22 +220,19 @@ async function runChecker() {
         checkedCount++;
 
         if (status === 'ABORTED') {
-            isRunning = false;
-            break;
-        } else if (status === 'AVAILABLE') {
-            availableCount++;
-            addLog(`[+] AVAILABLE: ${username}${currentProxy ? ` (Proxy: ${currentProxy})` : ''}`, 'success');
-            if (webhookUrl) {
-                const sent = await sendToWebhook(username, webhookUrl);
-                if (!sent) {
-                    addLog(`[!] Échec envoi webhook pour ${username}`, 'error');
-                }
-            }
-        } else if (status === 'TAKEN') {
-            takenCount++;
-            addLog(`[-] TAKEN: ${username}`, 'error');
-        } else {
-            addLog(`[!] ERREUR: ${username} (${status})`, 'error');
+    isRunning = false;
+    break;
+} else if (status === 'AVAILABLE') {
+    availableCount++;
+    addLog(`[+] AVAILABLE: ${username}${currentProxy ? ` (Proxy: ${currentProxy})` : ''}`, 'success');
+    if (webhookUrl) await sendToWebhook(username, webhookUrl);
+} else if (status === 'TAKEN') {
+    takenCount++;
+    addLog(`[-] TAKEN: ${username}${currentProxy ? ` (Proxy: ${currentProxy})` : ''}`, 'error'); // ⚠️ PROXY AFFICHÉ
+} else if (status === 'RATELIMIT') {
+    addLog(`[!] RATELIMIT: ${username}${currentProxy ? ` (Proxy: ${currentProxy})` : ''}`, 'error'); // ⚠️ PROXY AFFICHÉ
+} else {
+    addLog(`[!] ERREUR: ${username}${currentProxy ? ` (Proxy: ${currentProxy})` : ''} (${status})`, 'error'); // ⚠️ PROXY AFFICHÉ
         }
         updateStats();
 
