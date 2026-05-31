@@ -16,12 +16,6 @@ const logOutput = document.getElementById('logOutput');
 const amountInput = document.getElementById('amount');
 const webhookUrlInput = document.getElementById('webhookUrl');
 const customSettings = document.getElementById('customSettings');
-const checkedCountEl = document.getElementById('checkedCount');
-const availableCountEl = document.getElementById('availableCount');
-const takenCountEl = document.getElementById('takenCount');
-const usernameSettings = document.getElementById('usernameSettings');
-const proxyCheckerSection = document.getElementById('proxyCheckerSection');
-const settingsDescription = document.getElementById('settingsDescription');
 
 // === CHARGEMENT DES PARAMÈTRES ===
 function loadSettings() {
@@ -32,7 +26,7 @@ function loadSettings() {
         webhookUrlInput.value = settings.webhookUrl || '';
         document.getElementById('length').value = settings.length || 4;
         document.getElementById('charPool').value = settings.charPool || 'alphanum';
-        document.getElementById('delay').value = settings.delay || 1000;
+        document.getElementById('delay').value = settings.delay || 5000;
     }
 }
 
@@ -56,15 +50,6 @@ modeCards.forEach(card => {
         card.classList.add('selected');
         currentMode = card.dataset.mode;
         customSettings.style.display = (currentMode === 'custom') ? 'block' : 'none';
-        if (currentMode === 'proxy') {
-            usernameSettings.style.display = 'none';
-            proxyCheckerSection.style.display = 'block';
-            settingsDescription.textContent = "Teste la vie de tes proxys";
-        } else {
-            usernameSettings.style.display = 'block';
-            proxyCheckerSection.style.display = 'none';
-            settingsDescription.textContent = "Quantité · proxies · webhook · délai";
-        }
     });
 });
 
@@ -92,21 +77,20 @@ function addLog(message, type = 'info') {
 
 // === MISE À JOUR DES STATS ===
 function updateStats() {
-    checkedCountEl.textContent = checkedCount;
-    availableCountEl.textContent = availableCount;
-    takenCountEl.textContent = takenCount;
+    document.getElementById('checkedCount').textContent = checkedCount;
+    document.getElementById('availableCount').textContent = availableCount;
+    document.getElementById('takenCount').textContent = takenCount;
 }
 
 // === ENVOI À UN WEBHOOK ===
 async function sendToWebhook(username, webhookUrl) {
     if (!webhookUrl || !username) return false;
     try {
-        const response = await fetch(webhookUrl, {
+        await fetch(webhookUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ content: `🎉 **Nouveau pseudo dispo !** : \`${username}\``, username: "Kxrma Bot" })
         });
-        if (!response.ok) return false;
         addLog(`[✉️] Webhook envoyé: ${username}`, 'info');
         return true;
     } catch (e) { return false; }
@@ -115,11 +99,10 @@ async function sendToWebhook(username, webhookUrl) {
 // === VÉRIFICATION D'UN USERNAME ===
 async function checkUsername(username, proxy = null) {
     try {
-        const payload = { username, proxy };
         const response = await fetch('/api/checkUsername', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
+            body: JSON.stringify({ username, proxy }),
             signal: abortController?.signal
         });
         const data = await response.json();
@@ -130,7 +113,7 @@ async function checkUsername(username, proxy = null) {
     }
 }
 
-// === FONCTION PRINCIPALE DE CHECK (AVEC GESTION DES PROXIES DÉFECTUEUX) ===
+// === FONCTION PRINCIPALE DE CHECK ===
 async function runChecker() {
     if (isRunning) {
         isRunning = false;
@@ -158,7 +141,7 @@ async function runChecker() {
 
     const amount = parseInt(amountInput.value);
     const webhookUrl = webhookUrlInput.value.trim();
-    const delay = parseInt(document.getElementById('delay').value) || 1000;
+    const delay = parseInt(document.getElementById('delay').value) || 5000;
 
     addLog(`🚀 Démarrage du check (délai: ${delay}ms)...`, 'info');
 
