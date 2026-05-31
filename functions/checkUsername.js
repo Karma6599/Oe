@@ -8,8 +8,6 @@ exports.handler = async (event, context) => {
 
     try {
         const { username, proxy } = JSON.parse(event.body);
-
-        // ⚠️ On utilise l'endpoint PUBLIC de Discord (pas besoin de token !)
         const url = `https://discord.com/users/${username}`;
 
         const headers = {
@@ -19,7 +17,6 @@ exports.handler = async (event, context) => {
             "Connection": "keep-alive"
         };
 
-        // Configuration du proxy
         let agent = null;
         if (proxy) {
             try {
@@ -37,79 +34,71 @@ exports.handler = async (event, context) => {
             }
         }
 
-        // ⚠️ Requête HEAD (plus légère qu'une requête GET)
+        // ⚠️ On désactive les redirections automatiques
         const response = await fetch(url, {
-            method: 'HEAD', // ⚠️ Méthode HEAD pour économiser de la bande passante
+            method: 'HEAD',
             headers: headers,
             agent: agent,
             timeout: 10000,
-            redirect: 'manual' // ⚠️ Désactive les redirections automatiques
+            redirect: 'manual' // ⚠️ NE PAS SUIVRE LES REDIRECTIONS
         });
 
-        // ⚠️ Discord retourne :
-        // - 404 = Username DISPONIBLE
-        // - 200 = Username PRIS
-        // - 429 = Rate limit
+        // ⚠️ NOUVELLE LOGIQUE :
         if (response.status === 404) {
+            // 404 = Username N'EXISTE PAS → DISPONIBLE
             return {
                 statusCode: 200,
-                body: JSON.stringify({
-                    username,
-                    status: 'AVAILABLE',
-                    proxy
-                })
+                body: JSON.stringify({ username, status: 'AVAILABLE', proxy })
             };
         } else if (response.status === 200) {
+            // 200 = Username EXISTE → PRIS
             return {
                 statusCode: 200,
-                body: JSON.stringify({
-                    username,
-                    status: 'TAKEN',
-                    proxy
-                })
+                body: JSON.stringify({ username, status: 'TAKEN', proxy })
             };
+        } else if (response.status === 301 || response.status === 302) {
+            // ⚠️ Discord redirige souvent vers /login
+            const location = response.headers.get('location') || '';
+            if (location.includes('/login')) {
+                // Redirection vers /login = Username N'EXISTE PAS → DISPONIBLE
+                return {
+                    statusCode: 200,
+                    body: JSON.stringify({ username, status: 'AVAILABLE', proxy })
+                };
+            } else if (location.includes('/users/')) {
+                // Redirection vers /users/... = Username EXISTE → PRIS
+                return {
+                    statusCode: 200,
+                    body: JSON.stringify({ username, status: 'TAKEN', proxy })
+                };
+            } else {
+                return {
+                    statusCode: 200,
+                    body: JSON.stringify({ username, status: 'ERROR', proxy, error: `Redirection vers ${location}` })
+                };
+            }
         } else if (response.status === 429) {
             const retryAfter = response.headers.get('retry-after') || 5;
             return {
                 statusCode: 429,
-                body: JSON.stringify({
-                    username,
-                    status: 'RATELIMIT',
-                    proxy,
-                    retryAfter: parseInt(retryAfter) * 1000
-                })
+                body: JSON.stringify({ username, status: 'RATELIMIT', proxy, retryAfter: parseInt(retryAfter) * 1000 })
             };
         } else {
             return {
-                statusCode: response.status,
-                body: JSON.stringify({
-                    username,
-                    status: 'ERROR',
-                    proxy,
-                    error: `HTTP ${response.status}`
-                })
+                statusCode: 200,
+                body: JSON.stringify({ username, status: 'ERROR', proxy, error: `HTTP ${response.status}` })
             };
         }
     } catch (error) {
-        if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.message.includes('proxy')) {
+        if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
             return {
                 statusCode: 500,
-                body: JSON.stringify({
-                    username: error.username || 'inconnu',
-                    status: 'PROXY_ERROR',
-                    proxy: error.proxy,
-                    error: error.message
-                })
+                body: JSON.stringify({ username: 'inconnu', status: 'PROXY_ERROR', proxy: error.proxy, error: error.message })
             };
         } else {
             return {
                 statusCode: 500,
-                body: JSON.stringify({
-                    username: 'inconnu',
-                    status: 'ERROR',
-                    proxy: error.proxy,
-                    error: error.message
-                })
+                body: JSON.stringify({ username: 'inconnu', status: 'ERROR', proxy: error.proxy, error: error.message })
             };
         }
     }
