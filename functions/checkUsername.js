@@ -9,22 +9,17 @@ exports.handler = async (event, context) => {
     try {
         const { username, proxy } = JSON.parse(event.body);
 
-        // Le vrai endpoint actuel pour check la dispo d'un pseudo
-        const url = `https://discord.com/api/v9/users/@me/pomelo-attempt`;
-
-        // ⚠️ METS LE TOKEN D'UN COMPTE POUBELLE ICI
-        const DISCORD_TOKEN = "MTMzMTMzODYwNTY5OTc5MzA0Nw.GabHsJ.Iw5czBWy65Vzl6tdzQk7NYEFzCkZeEz1LCryiY";
+        // ⚠️ On utilise l'endpoint PUBLIC de Discord (pas besoin de token !)
+        const url = `https://discord.com/users/${username}`;
 
         const headers = {
-            "Content-Type": "application/json",
-            "Authorization": DISCORD_TOKEN, // Essentiel pour cet endpoint
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml",
+            "Accept-Language": "fr-FR,fr;q=0.9",
+            "Connection": "keep-alive"
         };
 
-        const payload = {
-            username: username
-        };
-
+        // Configuration du proxy
         let agent = null;
         if (proxy) {
             try {
@@ -42,33 +37,47 @@ exports.handler = async (event, context) => {
             }
         }
 
+        // ⚠️ Requête HEAD (plus légère qu'une requête GET)
         const response = await fetch(url, {
-            method: 'POST',
+            method: 'HEAD', // ⚠️ Méthode HEAD pour économiser de la bande passante
             headers: headers,
-            body: JSON.stringify(payload),
             agent: agent,
-            timeout: 10000
+            timeout: 10000,
+            redirect: 'manual' // ⚠️ Désactive les redirections automatiques
         });
 
-        const data = await response.json();
-
-        // L'API pomelo-attempt renvoie un JSON avec { taken: true/false }
-        if (response.status === 200) {
-            if (data.taken === true) {
-                return {
-                    statusCode: 200,
-                    body: JSON.stringify({ username, status: 'TAKEN', proxy })
-                };
-            } else if (data.taken === false) {
-                return {
-                    statusCode: 200,
-                    body: JSON.stringify({ username, status: 'AVAILABLE', proxy })
-                };
-            }
+        // ⚠️ Discord retourne :
+        // - 404 = Username DISPONIBLE
+        // - 200 = Username PRIS
+        // - 429 = Rate limit
+        if (response.status === 404) {
+            return {
+                statusCode: 200,
+                body: JSON.stringify({
+                    username,
+                    status: 'AVAILABLE',
+                    proxy
+                })
+            };
+        } else if (response.status === 200) {
+            return {
+                statusCode: 200,
+                body: JSON.stringify({
+                    username,
+                    status: 'TAKEN',
+                    proxy
+                })
+            };
         } else if (response.status === 429) {
+            const retryAfter = response.headers.get('retry-after') || 5;
             return {
                 statusCode: 429,
-                body: JSON.stringify({ username, status: 'RATELIMIT', proxy })
+                body: JSON.stringify({
+                    username,
+                    status: 'RATELIMIT',
+                    proxy,
+                    retryAfter: parseInt(retryAfter) * 1000
+                })
             };
         } else {
             return {
@@ -77,18 +86,31 @@ exports.handler = async (event, context) => {
                     username,
                     status: 'ERROR',
                     proxy,
-                    error: data.message || 'Erreur API'
+                    error: `HTTP ${response.status}`
                 })
             };
         }
     } catch (error) {
-        return {
-            statusCode: 500,
-            body: JSON.stringify({
-                username: 'inconnu',
-                status: 'PROXY_ERROR',
-                error: error.message
-            })
-        };
+        if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.message.includes('proxy')) {
+            return {
+                statusCode: 500,
+                body: JSON.stringify({
+                    username: error.username || 'inconnu',
+                    status: 'PROXY_ERROR',
+                    proxy: error.proxy,
+                    error: error.message
+                })
+            };
+        } else {
+            return {
+                statusCode: 500,
+                body: JSON.stringify({
+                    username: 'inconnu',
+                    status: 'ERROR',
+                    proxy: error.proxy,
+                    error: error.message
+                })
+            };
+        }
     }
 };
